@@ -12,7 +12,7 @@ import (
 )
 
 type GlobalFlags struct {
-	Config string `subcmd:"config,$HOME/.glean.yaml,'config file'"`
+	config.ConfigFlags
 }
 
 var (

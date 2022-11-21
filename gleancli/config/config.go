@@ -15,6 +15,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type ConfigFlags struct {
+	Config string `subcmd:"config,$HOME/.glean.yaml,'glean config file'"`
+}
+
 type Config struct {
 	Auth struct {
 		BearerToken string `yaml:"token"`
