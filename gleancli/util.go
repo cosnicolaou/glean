@@ -19,7 +19,13 @@ func parseError(r *http.Response, err error) error {
 	}
 	oapiErr, ok := err.(*gleansdk.GenericOpenAPIError)
 	if !ok {
-		return fmt.Errorf("%v: %v: %v\n", r.Request.URL, r.StatusCode, err)
+		if r != nil {
+			return fmt.Errorf("%v: %v: %v\n", r.Request.URL, r.StatusCode, err)
+		}
+		return err
+	}
+	if r == nil {
+		return err
 	}
 	var tmp any
 	body := oapiErr.Body()

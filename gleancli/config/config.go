@@ -6,7 +6,6 @@ package config
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -19,7 +18,8 @@ type ConfigFlags struct {
 	Config string `subcmd:"config,$HOME/.glean.yaml,'glean config file'"`
 }
 
-type Config struct {
+type GleanConfig []struct {
+	Name string `yaml:"name"`
 	Auth struct {
 		BearerToken string `yaml:"token"`
 	}
@@ -28,37 +28,45 @@ type Config struct {
 	}
 }
 
-func (c *Config) String() string {
+func (c GleanConfig) String() string {
 	var out strings.Builder
-	out.WriteString("auth:\n")
-	if len(c.Auth.BearerToken) > 0 {
-		fmt.Fprintf(&out, "  token: **redacted**\n")
+	for _, cfg := range c {
+		fmt.Fprintf(&out, "name: %s\n  auth:\n", cfg.Name)
+		if len(cfg.Auth.BearerToken) > 0 {
+			fmt.Fprintf(&out, "  token: **redacted**\n")
+		}
+		fmt.Fprintf(&out, "api\n  url: %s\n", cfg.API.Domain)
 	}
-	fmt.Fprintf(&out, "api\n  url: %s\n", c.API.Domain)
 	return out.String()
 }
 
-func (c *Config) NewAPIClient(ctx context.Context) (context.Context, *gleansdk.APIClient) {
-	templateVars := map[string]string{
-		"domain": c.API.Domain,
+func (c GleanConfig) NewAPIClient(ctx context.Context, name string) (context.Context, *gleansdk.APIClient, error) {
+	for _, cfg := range c {
+		if cfg.Name == name {
+			templateVars := map[string]string{
+				"domain": cfg.API.Domain,
+			}
+			ctx = context.WithValue(ctx, gleansdk.ContextAccessToken, cfg.Auth.BearerToken)
+			ctx = context.WithValue(ctx, gleansdk.ContextServerVariables, templateVars)
+			return ctx, gleansdk.NewAPIClient(gleansdk.NewConfiguration()), nil
+		}
 	}
-	ctx = context.WithValue(ctx, gleansdk.ContextAccessToken, c.Auth.BearerToken)
-	ctx = context.WithValue(ctx, gleansdk.ContextServerVariables, templateVars)
-	return ctx, gleansdk.NewAPIClient(gleansdk.NewConfiguration())
+	return ctx, nil, fmt.Errorf("failed to find config for %s", name)
 }
 
-func ParseConfig(file string) (*Config, error) {
-	cfg := &Config{}
-	data, err := os.ReadFile(file)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			fmt.Printf("warning: %q not found\n", file)
-			return cfg, nil
-		}
-		return nil, err
-	}
-	if err := yaml.Unmarshal([]byte(data), cfg); err != nil {
-		return nil, err
+func ParseConfig[T any](buf []byte) (T, error) {
+	var cfg T
+	if err := yaml.Unmarshal(buf, &cfg); err != nil {
+		return cfg, err
 	}
 	return cfg, nil
+}
+
+func ParseConfigFile[T any](file string) (T, error) {
+	spec, err := os.ReadFile(file)
+	if err != nil {
+		var cfg T
+		return cfg, err
+	}
+	return ParseConfig[T](spec)
 }
